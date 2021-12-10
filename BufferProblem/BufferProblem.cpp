@@ -1,6 +1,7 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
+#include <semaphore>
 
 const int n = 100;
 const int k = 50;
@@ -9,15 +10,23 @@ int buffer[n];
 int next_in = 0;
 int next_out = 0;
 
+std::counting_semaphore f(0);
+std::counting_semaphore e(n);
+
 
 void producer()
 {
     while (1) {
         int k1 = rand() % k;
+
         for (int i = 0; i < k1; i++) {
+            e.acquire();
             buffer[(next_in + i) % n] += 1;
         }
+
         next_in = (next_in + k1) % n;
+        f.release(k1);
+
         int t1 = rand() % t;
         std::this_thread::sleep_for(std::chrono::seconds(t1));
     }
@@ -31,8 +40,10 @@ void consumer()
         int t2 = rand() % t;
         std::this_thread::sleep_for(std::chrono::seconds(t2));
         int k2 = rand() % k;
+        
         int data;
         for (int i = 0; i < k2; i++) {
+            f.acquire();
             data = buffer[(next_out) % n];
             if (data > 1 || data == 0) {
                 std::cout << "Race condition meet, Data: " << data << std::endl;
@@ -42,6 +53,9 @@ void consumer()
             buffer[(next_out) % n] = 0;
             next_out = (next_out + 1) % n;
         }
+
+        e.release(k2);
+
         if (race)
             break;
     }
@@ -55,6 +69,7 @@ int main()
     for (int i = 0; i < n; i++) {
         buffer[i] = 0;
     }
+
 
     std::thread p = std::thread(producer);
     std::thread c = std::thread(consumer);
